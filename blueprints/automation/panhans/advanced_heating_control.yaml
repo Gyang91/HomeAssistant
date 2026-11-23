@@ -1,5 +1,5 @@
 blueprint:
-  name: 🔥 Advanced Heating Control V5
+  name: 🔥 Advanced Heating Control V5 (custom)
   author: panhans
   homeassistant:
     min_version: "2024.10.0"
@@ -48,7 +48,7 @@ blueprint:
     [![Open your Home Assistant instance and show an integration.](https://my.home-assistant.io/badges/integration.svg)](https://my.home-assistant.io/redirect/integration/?domain=uptime)
 
 
-    **Version**: 5.5.10
+    **Version**: 5.5.11
 
     **Help & FAQ**: [Advanced Heating Control](https://community.home-assistant.io/t/advanced-heating-control/469873)
 
@@ -60,7 +60,7 @@ blueprint:
       <img src='https://raw.githubusercontent.com/andreostrovsky/donate-with-paypal/refs/heads/master/blue.svg'
            width="200" alt="Donate with PayPal">
     </a>
-  source_url: https://github.com/panhans/HomeAssistant/blob/main/blueprints/automation/panhans/advanced_heating_control.yaml
+  source_url: https://github.com/Gyang91/HomeAssistant/blob/ahc-custom/blueprints/automation/panhans/advanced_heating_control.yaml
   domain: automation
   input:
     thermostat_section:
@@ -1345,7 +1345,7 @@ blueprint:
 
 
             Select the day of the week for the execution.
-          default: "Mon"
+          default: ["Mon"]
           selector:
             select:
               options:
@@ -1661,6 +1661,41 @@ blueprint:
               step: 1
               mode: slider
               unit_of_measurement: "%"
+
+        input_valve_positioning_min_opening:
+          name: 🎚️ Min Opening Valve Position
+          description: >
+            `valve positioning` `optional`
+
+
+            The minimum valve opening while the target temperature is above the current temperature. If the calculated dynamic valve position is below this value, the valve is set to this value instead. At or above the target temperature, the valve can still close completely. The value is limited to *Max Opening Valve Position*.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 100
+              step: 1
+              mode: slider
+              unit_of_measurement: "%"
+
+        input_valve_positioning_min_opening_mode:
+          name: 🎚️ Minimum Opening Calculation
+          description: >
+            `valve positioning` `minimum opening`
+
+
+            **Minimum limit:** Keeps the existing calculation and only raises results below the configured minimum.
+
+            **Scaled range:** Maps the calculated 0–100% control signal proportionally into the usable range between the configured minimum and maximum opening. The valve can still close completely when there is no heat demand.
+          default: "minimum"
+          selector:
+            select:
+              mode: list
+              options:
+                - label: "Minimum limit (existing behavior)"
+                  value: "minimum"
+                - label: "Scale usable range (minimum to maximum)"
+                  value: "scaled"
 
         input_valve_positioning_timeout:
           name: ⏱️ Valve Positioning Timeout
@@ -2042,7 +2077,7 @@ trigger:
           | expand
           | selectattr('attributes.device_class', 'eq', 'enum')
           | map(attribute='entity_id') | select('is_state','towards')
-          | map('regex_replace','_(?=[^_]*$)(.*)', '')
+          | map('regex_replace','_(distance|direction_of_travel)$', '')
           | list %}
 
       {% set distances = proximity_entities
@@ -2060,7 +2095,7 @@ trigger:
           | selectattr('attributes.device_class', 'eq', 'distance')
           | selectattr('state', 'in', distances)
           | map(attribute='entity_id')
-          | map('regex_replace','_(?=[^_]*$)(.*)', '')
+          | map('regex_replace','_(distance|direction_of_travel)$', '')
           | list %}
 
       {% set entites_towards_and_in_distance = entities_towards | select('in', entities_distances) | list | count > 0 %}
@@ -2082,7 +2117,7 @@ trigger:
           | expand
           | selectattr('attributes.device_class', 'eq', 'enum')
           | map(attribute='entity_id') | select('is_state','towards')
-          | map('regex_replace','_(?=[^_]*$)(.*)', '')
+          | map('regex_replace','_(distance|direction_of_travel)$', '')
           | list %}
 
       {% set distances = proximity_entities
@@ -2100,7 +2135,7 @@ trigger:
           | selectattr('attributes.device_class', 'eq', 'distance')
           | selectattr('state', 'in', distances)
           | map(attribute='entity_id')
-          | map('regex_replace','_(?=[^_]*$)(.*)', '')
+          | map('regex_replace','_(distance|direction_of_travel)$', '')
           | list %}
 
       {% set entites_towards_and_in_distance = entities_towards | select('in', entities_distances) | list | count > 0 %}
@@ -2516,6 +2551,8 @@ variables:
   input_valve_positioning_mode: !input input_valve_positioning_mode
   input_valve_positioning_timeout: !input input_valve_positioning_timeout
   input_valve_positioning_max_opening: !input input_valve_positioning_max_opening
+  input_valve_positioning_min_opening: !input input_valve_positioning_min_opening
+  input_valve_positioning_min_opening_mode: !input input_valve_positioning_min_opening_mode
 
   #####################################################################################
   #################################### EVALUATION #####################################
@@ -2632,7 +2669,7 @@ variables:
         | selectattr('attributes.device_class', 'eq', 'enum')
         | selectattr('last_changed', '<=', earliest_timestamp)
         | map(attribute='entity_id') | select('is_state','towards')
-        | map('regex_replace','_(?=[^_]*$)(.*)', '')
+        | map('regex_replace','_(distance|direction_of_travel)$', '')
         | list %}
 
     {% set distances = proximity_entities
@@ -2650,7 +2687,7 @@ variables:
         | selectattr('attributes.device_class', 'eq', 'distance')
         | selectattr('state', 'in', distances)
         | map(attribute='entity_id')
-        | map('regex_replace','_(?=[^_]*$)(.*)', '')
+        | map('regex_replace','_(distance|direction_of_travel)$', '')
         | list %}
 
     {% set towards_and_in_distance = entities_towards | select('in', entities_distances) | list | count > 0 %}
@@ -3132,20 +3169,25 @@ variables:
   is_window_trigger: "{{ trigger_id_defined and 'temperature_change_window_' in trigger.id }}"
   is_liming_trigger: "{{ trigger_id_defined and 'temperature_change_liming_protection' in trigger.id }}"
 
-  is_bllaaaa: >
-    {% if trigger_id_defined and 'temperature_change_window_on' in trigger.id %}
-        {{ true }}
-    {% elif trigger_id_defined and 'temperature_change_window_off' not in trigger.id %}
-      {{ false }}
-    {% elif input_window_open_temperature | float(0) > 0 and (is_off_if_nobody_home_and_window_open_temp and not is_anybody_home_or_proximity)  %}
-      {{ true }}
+  window_open_temperature: >
+    {% if input_window_open_temperature_number != [] and is_number(states(input_window_open_temperature_number)) %}
+      {{ states(input_window_open_temperature_number) | float }}
+    {% else %}
+      {{ input_window_open_temperature }}
     {% endif %}
+
+  is_off_window_open_nobody_home: >
+    {{ state_window and
+       window_open_temperature | float(0) > 0 and
+       is_off_if_nobody_home_and_window_open_temp and
+       (is_person_defined or is_proximity_defined) and
+       not is_anybody_home_or_proximity }}
 
   is_changes_trigger: >
     {% if state_window %}
       {% if trigger_id_defined and 'temperature_change_window_on' in trigger.id %}
         {{ true }}
-      {% elif input_window_open_temperature | float(0) > 0 and is_off_if_nobody_home and is_off_if_nobody_home_and_window_open_temp %}
+      {% elif is_off_window_open_nobody_home %}
         {{ true }}
       {% elif trigger_id_defined and 'temperature_change_window_off' not in trigger.id %}
         {{ false }}
@@ -3205,13 +3247,6 @@ variables:
   #################################### CHANGES ########################################
   #####################################################################################
 
-  window_open_temperature: >
-    {% if input_window_open_temperature_number != [] and is_number(states(input_window_open_temperature_number)) %}
-      {{ states(input_window_open_temperature_number) | float }}
-    {% else %}
-      {{ input_window_open_temperature }}
-    {% endif %}
-
   mode: >
     {% if set_max_temperature %}
       {{ input_hvac_mode }}
@@ -3221,9 +3256,9 @@ variables:
       {{ 'off' }}
     {% elif entry_mode == 'off' %}
       {{ 'off' }}
-    {% elif is_off_if_nobody_home and not is_anybody_home_or_proximity and not set_comfort %}
+    {% elif is_off_if_nobody_home and (is_person_defined or is_proximity_defined) and not is_anybody_home_or_proximity and not set_comfort %}
       {{ 'off' }}
-    {% elif state_window and window_open_temperature | float > 0 and is_off_if_nobody_home_and_window_open_temp and not is_anybody_home_or_proximity %}
+    {% elif is_off_window_open_nobody_home %}
       {{ 'off' }}
     {% else %}
       {{ input_hvac_mode }}
@@ -3297,7 +3332,7 @@ variables:
           {% set dont_turn_off =
               valve in valves_without_off_mode or
               is_not_off_but_min or
-              (state_window and window_open_temperature > 0 and (is_off_if_nobody_home_and_window_open_temp and is_anybody_home_or_proximity) and not is_minimal_config) or
+              (state_window and window_open_temperature > 0 and not is_off_window_open_nobody_home and not is_minimal_config) or
               set_max_temperature %}
 
           {% set ref_temp = current_valve_temp %}
@@ -3419,10 +3454,25 @@ variables:
 
             {% set opening_abs = iif(difference >= input_fully_open_difference, opening_max, opening_abs) %}
             {% set opening_abs = iif(difference < 0, 0, opening_abs) %}
+            {% set opening_rel = iif(difference >= input_fully_open_difference, 100, opening_rel) %}
+            {% set opening_rel = iif(difference < 0, 0, opening_rel) %}
 
-            {% set opening_abs = opening_abs / 100 * input_valve_positioning_max_opening %}
+            {% set maximum_opening = (opening_max / 100 * input_valve_positioning_max_opening) | int %}
+            {% set minimum_opening = [opening_max / 100 * (input_valve_positioning_min_opening | int(0)), maximum_opening] | min %}
+
+            {% if difference > 0 and input_valve_positioning_min_opening_mode == 'scaled' %}
+              {# Map the calculated 0–100% signal into the usable minimum–maximum range. #}
+              {% set opening_abs = minimum_opening + ((maximum_opening - minimum_opening) * (opening_rel / 100)) %}
+            {% else %}
+              {% set opening_abs = opening_abs / 100 * input_valve_positioning_max_opening %}
+            {% endif %}
 
             {% set opening_abs = ((opening_abs + step_size / 2) // step_size * step_size) | int %}
+
+            {% if difference > 0 %}
+              {% set opening_abs = [opening_abs, minimum_opening] | max %}
+              {% set opening_abs = [opening_abs, maximum_opening] | min %}
+            {% endif %}
           {% endif %}
 
           {% set open_valve_entity_value = states(open_valve_entity) | int %}
