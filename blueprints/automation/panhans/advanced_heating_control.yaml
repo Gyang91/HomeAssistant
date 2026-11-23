@@ -3422,7 +3422,7 @@ variables:
             | map(attribute='entity_id')
             | list | first | default(none) %}
 
-        {% if open_valve_entity != none and current_temp != none and target_temp != none and
+        {% if open_valve_entity != none and is_number(states(open_valve_entity)) and current_temp != none and target_temp != none and
             (
               (trigger_id_defined and trigger.id == 'positioning_event') or
               ([open_valve_entity] | expand | map(attribute='last_changed') | first) + timedelta(**input_valve_positioning_timeout) <= now()
