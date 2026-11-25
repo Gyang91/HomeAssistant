@@ -8,7 +8,7 @@ blueprint:
     *Version:* 5
     "
   domain: template
-  source_url: https://github.com/panhans/HomeAssistant/blob/main/blueprints/template/panhans/advanced_heating_control_sensor.yaml
+  source_url: https://github.com/Gyang91/HomeAssistant/blob/ahc-custom/blueprints/template/panhans/advanced_heating_control_sensor.yaml
 
   input:
     ahc_automation:
@@ -61,5 +61,5 @@ binary_sensor:
     target_temperature: "{{ trigger.event.data.target_temperature}}"
     set_max_temperature: "{{ trigger.event.data.set_max_temperature}}"
     last_trigger_id: "{{ trigger.event.data.last_trigger_id}}"
-    last_calibration: "{{ iif(trigger.event.data.calibration_trigger, now(), this.attributes.last_calibration)}}"
-    last_temperature_change: "{{ iif(trigger.event.data.change_trigger, now(), this.attributes.last_temperature_change)}}"
+    last_calibration: "{{ iif(trigger.event.data.calibration_trigger, now(), this.attributes.get('last_calibration', ''))}}"
+    last_temperature_change: "{{ iif(trigger.event.data.change_trigger, now(), this.attributes.get('last_temperature_change', ''))}}"
